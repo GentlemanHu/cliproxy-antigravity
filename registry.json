@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "cliproxy-antigravity",
+      "name": "Antigravity CLI Provider — GentlemanHu Fork",
+      "description": "OAuth-account-scoped agy provider with fixed CLIProxyAPI model aliases, isolated multi-account model discovery and optional transport-metadata minimization.",
+      "author": "GentlemanHu",
+      "version": "0.3.3",
+      "repository": "https://github.com/GentlemanHu/cliproxy-antigravity",
+      "homepage": "https://github.com/GentlemanHu/cliproxy-antigravity",
+      "license": "MIT",
+      "tags": [
+        "provider",
+        "antigravity",
+        "agy",
+        "multi-account",
+        "model-alias",
+        "claude"
+      ],
+      "locales": {
+        "zh-CN": {
+          "name": "Antigravity CLI（GentlemanHu Fork）",
+          "description": "支持 agy 多账号独立模型注册、CLIProxyAPI OAuth 模型别名与可选系统消息元数据精简。"
+        }
+      }
+    }
+  ]
+}

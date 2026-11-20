@@ -1,16 +1,20 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Dotted release version without v prefix (e.g. 0.3.3)"
+        required: true
+        type: string
+        default: "0.3.3"
 
 permissions:
   contents: write
 
 env:
   PLUGIN_ID: cliproxy-antigravity
+  RELEASE_VERSION: ${{ inputs.release_version }}
 
 jobs:
   test:
@@ -22,8 +26,26 @@ jobs:
         with:
           go-version: "1.23.x"
           cache: false
-      - name: Unit tests
-        run: CGO_ENABLED=1 go test -v ./...
+      - name: Validate release version and format
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected X.Y.Z release version; got $RELEASE_VERSION"
+            exit 1
+          fi
+          if ! grep -Fq "pluginVersion = \"$RELEASE_VERSION\"" plugin.go; then
+            echo "::error::Release version differs from plugin.go"
+            exit 1
+          fi
+          unformatted="$(gofmt -l *.go scripts/*.go)"
+          if [[ -n "$unformatted" ]]; then
+            echo "::error::Go sources are not gofmt-clean"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: Unit tests with race detector
+        run: CGO_ENABLED=1 go test -race ./...
 
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -72,11 +94,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="0.3.2"
-          fi
+          VERSION="$RELEASE_VERSION"
           mkdir -p dist
           LIB_NAME="${PLUGIN_ID}.${{ matrix.ext }}"
           ARCHIVE_NAME="${PLUGIN_ID}_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
@@ -97,6 +115,11 @@ jobs:
             -ldflags "-s -w" \
             -o "dist/${LIB_NAME}" .
           rm -f dist/*.h
+
+          # Validate the native Linux shared library against the CLIProxyAPI ABI.
+          if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "amd64" ]; then
+            python3 scripts/abi_smoke.py "dist/${LIB_NAME}"
+          fi
 
           go run scripts/package-release.go \
             -library "dist/${LIB_NAME}" \
@@ -135,8 +158,11 @@ jobs:
           echo "Generated checksums.txt:"
           cat checksums.txt
           cd ..
-          gh release create "${GITHUB_REF_NAME}" \
+          # gh creates the release tag at this checked-out feature commit.
+          # Never publish binaries if a test/build job failed.
+          gh release create "v${RELEASE_VERSION}" \
             dist/*.zip \
             dist/checksums.txt \
-            --title "${GITHUB_REF_NAME}" \
+            --target "${GITHUB_SHA}" \
+            --title "v${RELEASE_VERSION} (GentlemanHu Fork)" \
             --generate-notes

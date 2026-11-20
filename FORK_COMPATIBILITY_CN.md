@@ -1,6 +1,6 @@
 # GentlemanHu Fork：CLIProxyAPI + agy 兼容修复说明
 
-基线：`adeebahmad01/cliproxy-antigravity` v0.3.2。维护分支：`fix/oauth-model-alias-and-claude-bridge`。
+基线：`adeebahmad01/cliproxy-antigravity` v0.3.2。Fork Release 版本：`v0.3.3`；维护分支：`fix/oauth-model-alias-and-claude-bridge`。
 
 ## 本次修复
 
@@ -78,3 +78,8 @@ macOS 上使用 `.dylib`；Linux 将目标改为 `.so` 并在相应平台编译�
 ## 兼容性验收范围
 
 本次单元测试验证代码路径，并不等于已经在你的 Mac、Keychain、Google 账号、Claude Code 与 CLIProxyAPI 全链路实测。测试结果与 Release 状态应以 GitHub Actions 和你机器上的实际请求为准。
+
+
+## GitHub Actions + CLIProxyAPI 插件商店安装
+
+无需在 Mac 上编译或先合并 PR。参阅 [INSTALL_STORE_CN.md](INSTALL_STORE_CN.md)，通过 Actions 的 Release 工作流发布 `v0.3.3`，并使用本 Fork 的自定义 `registry.json` 在 CLIProxyAPI 插件商店中安装、升级。
