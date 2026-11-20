@@ -14,7 +14,9 @@ permissions:
 
 env:
   PLUGIN_ID: cliproxy-antigravity
-  RELEASE_VERSION: ${{ inputs.release_version }}
+  # GitHub can render workflow_dispatch controls from the default-branch workflow.
+  # The fallback keeps feature-branch dispatch safe even when that form has no input.
+  RELEASE_VERSION: ${{ inputs.release_version || '0.3.3' }}
 
 jobs:
   test:

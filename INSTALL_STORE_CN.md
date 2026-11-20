@@ -12,7 +12,7 @@ Release 版本：`v0.3.3`。
 
 1. 如果 GitHub 提示本 Fork 的工作流尚未启用，先启用 Actions。
 2. 选择 **Run workflow**。
-3. **Use workflow from** 选择 `fix/oauth-model-alias-and-claude-bridge`，参数 `release_version` 填 `0.3.3`。
+3. **Use workflow from** 选择 `fix/oauth-model-alias-and-claude-bridge`；若页面显示 `release_version` 参数，保持 `0.3.3`。若未显示该参数，也可以直接点击运行（工作流含 `0.3.3` 默认值）。
 4. 工作流先进行 `gofmt` 检查、Go `-race` 测试，再构建 macOS ARM64/AMD64、Linux AMD64/ARM64、Windows AMD64 动态库，并在 Linux AMD64 运行 ABI 冒烟测试。只有全部成功才会创建 `v0.3.3` Release。
 5. 在 [Releases](https://github.com/GentlemanHu/cliproxy-antigravity/releases) 确认存在 `checksums.txt` 及对应平台 ZIP。一般不需要手动下载这些文件，CLIProxyAPI 商店会自动下载并校验。
 
