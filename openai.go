@@ -69,6 +69,12 @@ func decodeChatRequest(raw []byte) (chatCompletionRequest, error) {
 }
 
 func buildPrompt(raw []byte, conversationID string, workdir string) (string, error) {
+	return buildPromptWithOptions(raw, conversationID, workdir, false)
+}
+
+// buildPromptWithOptions preserves client instructions by default. Optional stripping
+// removes protocol-only header lines from system/developer text, not identity prompts.
+func buildPromptWithOptions(raw []byte, conversationID string, workdir string, stripClientMetadata bool) (string, error) {
 	req, err := decodeChatRequest(raw)
 	if err != nil {
 		return "", err
@@ -123,6 +129,9 @@ func buildPrompt(raw []byte, conversationID string, workdir string) (string, err
 		if err != nil {
 			return "", pError(errorCodeRequestScoped, fmt.Sprintf("message %d: %v", i+1, err), http.StatusBadRequest)
 		}
+		if stripClientMetadata && (role == "system" || role == "developer") {
+			content = stripClientTransportMetadata(content)
+		}
 
 		b.WriteString("--- message ")
 		b.WriteString(fmt.Sprintf("%d", i+1))
@@ -163,6 +172,24 @@ func buildPrompt(raw []byte, conversationID string, workdir string) (string, err
 		b.WriteString("Do not execute local commands for client tools; the client application will run them and return the result.\n")
 	}
 	return b.String(), nil
+}
+
+// stripClientTransportMetadata removes standalone transport/telemetry header lines
+// that some clients accidentally serialize into system messages. It does not
+// obfuscate instructions, rewrite client identities, or touch user content.
+func stripClientTransportMetadata(content string) string {
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		lower := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lower, "x-anthropic-billing-header:") ||
+			strings.HasPrefix(lower, "anthropic-version:") ||
+			strings.HasPrefix(lower, "anthropic-beta:") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 func stageImage(dataURLOrPath string, workdir string) (string, error) {

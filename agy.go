@@ -98,22 +98,27 @@ func (r *processRegistry) killAll() {
 	}
 }
 
-type catalogState struct {
-	sync.Mutex
+type cachedModelCatalog struct {
 	fetchedAt  time.Time
-	binaryPath string
 	models     []modelInfo
 	nativeByID map[string]string
 }
 
-var modelCatalog = catalogState{}
+type catalogState struct {
+	sync.Mutex
+	// Cache models by the actual agy login home, never share a catalog between accounts.
+	byAccount map[string]cachedModelCatalog
+}
+
+var modelCatalog = catalogState{byAccount: make(map[string]cachedModelCatalog)}
+
+func modelCacheKey(cfg pluginConfig) string {
+	return cfg.BinaryPath + "\x00" + cfg.AccountHome + "\x00" + cfg.Workdir
+}
 
 func invalidateModels() {
 	modelCatalog.Lock()
-	modelCatalog.fetchedAt = time.Time{}
-	modelCatalog.binaryPath = ""
-	modelCatalog.models = nil
-	modelCatalog.nativeByID = nil
+	modelCatalog.byAccount = make(map[string]cachedModelCatalog)
 	modelCatalog.Unlock()
 }
 
@@ -173,15 +178,35 @@ func standardBuiltinModels() []modelInfo {
 }
 
 func discoverModels(cfg pluginConfig) []modelInfo {
+	key := modelCacheKey(cfg)
 	modelCatalog.Lock()
-	defer modelCatalog.Unlock()
-
-	if modelCatalog.binaryPath == cfg.BinaryPath && time.Since(modelCatalog.fetchedAt) < time.Minute && len(modelCatalog.models) > 0 {
-		return cloneModels(modelCatalog.models)
+	if cached, ok := modelCatalog.byAccount[key]; ok &&
+		time.Since(cached.fetchedAt) < time.Minute && len(cached.models) > 0 {
+		models := cloneModels(cached.models)
+		modelCatalog.Unlock()
+		return models
 	}
+	modelCatalog.Unlock()
 
-	builtin := standardBuiltinModels()
-	models := append([]modelInfo(nil), builtin...)
+	// An agy models call can take up to 15s. Never hold the global catalog
+	// mutex while it runs: other accounts and model routes must remain responsive.
+	models, nativeByID := discoverModelsUncached(cfg)
+
+	modelCatalog.Lock()
+	if modelCatalog.byAccount == nil {
+		modelCatalog.byAccount = make(map[string]cachedModelCatalog)
+	}
+	modelCatalog.byAccount[key] = cachedModelCatalog{
+		fetchedAt:  time.Now(),
+		models:     cloneModels(models),
+		nativeByID: nativeByID,
+	}
+	modelCatalog.Unlock()
+	return cloneModels(models)
+}
+
+func discoverModelsUncached(cfg pluginConfig) ([]modelInfo, map[string]string) {
+	models := append([]modelInfo(nil), standardBuiltinModels()...)
 	nativeByID := map[string]string{
 		"agy/default":                     "",
 		"antigravity/default":             "",
@@ -203,6 +228,7 @@ func discoverModels(cfg pluginConfig) []modelInfo {
 		binPath := resolveBinaryPath(cfg.BinaryPath)
 		cmd := exec.CommandContext(ctx, binPath, "models")
 		configureSysProcAttr(cmd)
+		applyAccountEnv(cmd, cfg)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -220,7 +246,6 @@ func discoverModels(cfg pluginConfig) []modelInfo {
 			}
 			for id, native := range mapping {
 				nativeByID[id] = native
-				// Also map unprefixed and antigravity/ prefixes
 				slug := strings.TrimPrefix(id, "agy/")
 				nativeByID[slug] = native
 				nativeByID["antigravity/"+slug] = native
@@ -235,12 +260,7 @@ func discoverModels(cfg pluginConfig) []modelInfo {
 			}
 		}
 	}
-
-	modelCatalog.fetchedAt = time.Now()
-	modelCatalog.binaryPath = cfg.BinaryPath
-	modelCatalog.models = models
-	modelCatalog.nativeByID = nativeByID
-	return cloneModels(models)
+	return models, nativeByID
 }
 
 // routeModel sends requests for agy models straight to this plugin's executor. agy manages its
@@ -274,14 +294,20 @@ func routeModel(req modelRouteRequest) modelRouteResponse {
 // catalogHasModel checks the last published catalog without running agy, since routing is on the request path.
 func catalogHasModel(model string) bool {
 	modelCatalog.Lock()
-	models := modelCatalog.models
-	modelCatalog.Unlock()
-	if len(models) == 0 {
-		models = standardBuiltinModels()
+	defer modelCatalog.Unlock()
+	if len(modelCatalog.byAccount) == 0 {
+		for _, m := range standardBuiltinModels() {
+			if strings.EqualFold(m.ID, model) {
+				return true
+			}
+		}
+		return false
 	}
-	for _, m := range models {
-		if strings.EqualFold(m.ID, model) {
-			return true
+	for _, cached := range modelCatalog.byAccount {
+		for _, m := range cached.models {
+			if strings.EqualFold(m.ID, model) {
+				return true
+			}
 		}
 	}
 	return false
@@ -440,12 +466,13 @@ func resolveNativeModel(model string, cfg pluginConfig) string {
 
 	_ = discoverModels(cfg)
 	modelCatalog.Lock()
-	defer modelCatalog.Unlock()
+	mapping := modelCatalog.byAccount[modelCacheKey(cfg)].nativeByID
+	modelCatalog.Unlock()
 
-	if native, ok := modelCatalog.nativeByID[cleanModel]; ok && native != "" {
+	if native, ok := mapping[cleanModel]; ok && native != "" {
 		return native
 	}
-	if native, ok := modelCatalog.nativeByID["agy/"+cleanModel]; ok && native != "" {
+	if native, ok := mapping["agy/"+cleanModel]; ok && native != "" {
 		return native
 	}
 	return cleanModel
@@ -973,7 +1000,7 @@ func executeNonStream(req rpcExecutorRequest) (executorResponse, error) {
 		return executorResponse{}, err
 	}
 	opts := resolveExecutionOptions(req, cfg)
-	prompt, err := buildPrompt(req.Payload, opts.ConversationID, cfg.Workdir)
+	prompt, err := buildPromptWithOptions(req.Payload, opts.ConversationID, cfg.Workdir, cfg.StripClientMetadata)
 	if err != nil {
 		return executorResponse{}, err
 	}
@@ -1014,7 +1041,7 @@ func executeStream(req rpcExecutorRequest) {
 	opts := resolveExecutionOptions(req, cfg)
 	opts.OutputFormat = "stream-json"
 
-	prompt, err := buildPrompt(req.Payload, opts.ConversationID, cfg.Workdir)
+	prompt, err := buildPromptWithOptions(req.Payload, opts.ConversationID, cfg.Workdir, cfg.StripClientMetadata)
 	if err != nil {
 		closePluginStream(streamID, err)
 		return

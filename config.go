@@ -24,6 +24,7 @@ type pluginConfig struct {
 	LimitsRefreshInterval      string
 	EnforceLimits              bool
 	AccountsDir                string
+	StripClientMetadata        bool
 	// AccountHome is the HOME given to agy for the account selected by CLIProxyAPI.
 	// It comes from the "home" field of the agy auth file, never from the plugin YAML.
 	AccountHome string
@@ -349,6 +350,12 @@ func parsePluginConfig(raw []byte) (pluginConfig, error) {
 				return pluginConfig{}, fmt.Errorf("line %d: invalid accounts_dir: %w", lineNo+1, err)
 			}
 			cfg.AccountsDir = cleaned
+		case "strip_client_metadata":
+			enabled, err := strconv.ParseBool(value)
+			if err != nil {
+				return pluginConfig{}, fmt.Errorf("line %d: strip_client_metadata must be true or false", lineNo+1)
+			}
+			cfg.StripClientMetadata = enabled
 		}
 	}
 

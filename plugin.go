@@ -11,7 +11,7 @@ import (
 const (
 	pluginID      = "cliproxy-antigravity"
 	providerID    = "agy"
-	pluginVersion = "0.3.2"
+	pluginVersion = "0.3.2-gh.1"
 	schemaVersion = 6
 )
 
@@ -20,6 +20,7 @@ const (
 	methodPluginReconfigure     = "plugin.reconfigure"
 	methodModelRegister         = "model.register"
 	methodModelStatic           = "model.static"
+	methodModelForAuth          = "model.for_auth"
 	methodModelRoute            = "model.route"
 	methodExecutorIdentifier    = "executor.identifier"
 	methodExecutorExecute       = "executor.execute"
@@ -158,6 +159,15 @@ type modelResponse struct {
 	Models   []modelInfo `json:"Models"`
 }
 
+// authModelRequest is the subset of pluginapi.AuthModelRequest used by model.for_auth.
+// Host-managed metadata wins over saved storage data if both contain a home.
+type authModelRequest struct {
+	AuthID       string
+	AuthProvider string
+	StorageJSON  []byte
+	Metadata     map[string]any
+}
+
 type modelInfo struct {
 	ID                         string   `json:"ID"`
 	Object                     string   `json:"Object"`
@@ -264,6 +274,29 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		models := discoverModels(currentConfig())
 		return okEnvelope(modelResponse{Provider: providerID, Models: models})
 
+	case methodModelForAuth:
+		var req authModelRequest
+		if err := json.Unmarshal(request, &req); err != nil {
+			return nil, pError("invalid_request", "could not decode model.for_auth request: "+err.Error(), http.StatusBadRequest)
+		}
+		if req.AuthProvider != "" && !strings.EqualFold(req.AuthProvider, providerID) {
+			return okEnvelope(modelResponse{Provider: providerID})
+		}
+		meta := make(map[string]any)
+		if len(req.StorageJSON) > 0 {
+			if err := json.Unmarshal(req.StorageJSON, &meta); err != nil {
+				return nil, pError("invalid_auth", "could not decode agy auth storage: "+err.Error(), http.StatusBadRequest)
+			}
+		}
+		for k, v := range req.Metadata {
+			meta[k] = v
+		}
+		cfg, err := withAccount(currentConfig(), meta)
+		if err != nil {
+			return nil, err
+		}
+		return okEnvelope(modelResponse{Provider: providerID, Models: discoverModels(cfg)})
+
 	case methodModelRoute:
 		var req modelRouteRequest
 		if err := json.Unmarshal(request, &req); err != nil {
@@ -319,7 +352,7 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		}
 		cfg := currentConfig()
 		opts := resolveExecutionOptions(req, cfg)
-		prompt, err := buildPrompt(req.Payload, opts.ConversationID, cfg.Workdir)
+		prompt, err := buildPromptWithOptions(req.Payload, opts.ConversationID, cfg.Workdir, cfg.StripClientMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -452,7 +485,7 @@ func pluginRegistration() registration {
 			Name:             "CLIProxy Antigravity",
 			Version:          pluginVersion,
 			Author:           "adeebahmad01 and contributors",
-			GitHubRepository: "https://github.com/adeebahmad01/cliproxy-antigravity",
+			GitHubRepository: "https://github.com/GentlemanHu/cliproxy-antigravity",
 			ConfigFields: []configField{
 				{Name: "binary_path", Type: "string", Default: defaults.BinaryPath, Description: "Path or command name for the official Antigravity CLI (default: agy)."},
 				{Name: "workdir", Type: "string", Default: defaults.Workdir, Description: "Working directory used when agy executes requests."},
@@ -464,6 +497,7 @@ func pluginRegistration() registration {
 				{Name: "limits_refresh_interval", Type: "string", Default: defaults.LimitsRefreshInterval, Description: "How long cached usage limits stay fresh, as a duration (default: 1m, minimum 10s)."},
 				{Name: "enforce_limits", Type: "boolean", Default: defaults.EnforceLimits, Description: "Reject requests with HTTP 429 when the quota group of the model is exhausted, without launching agy (default: false)."},
 				{Name: "accounts_dir", Type: "string", Default: defaults.AccountsDir, Description: "Directory with one agy home per account. Accounts added from the panel are created here (default ~/.agy-accounts), and every signed-in home in it gets its own CLIProxyAPI auth file. CLIProxyAPI rotates between the accounts."},
+				{Name: "strip_client_metadata", Type: "boolean", Default: defaults.StripClientMetadata, Description: "Opt-in removal of Anthropic transport/billing header lines embedded in system/developer text. Does not modify user prompts or conceal client identity (default: false)."},
 			},
 		},
 		Capabilities: registrationCapability{
@@ -471,7 +505,7 @@ func pluginRegistration() registration {
 			ModelProvider:         true,
 			ModelRouter:           true,
 			Executor:              true,
-			ExecutorModelScope:    "static",
+			ExecutorModelScope:    "oauth",
 			ExecutorInputFormats:  []string{"chat-completions"},
 			ExecutorOutputFormats: []string{"chat-completions"},
 			ManagementAPI:         true,

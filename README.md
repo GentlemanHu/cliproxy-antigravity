@@ -1,5 +1,8 @@
 # CLIProxy Antigravity
 
+> **GentlemanHu fork (v0.3.2-gh.1):** OAuth-backed `agy` per-account model registration, fixed alias routing, account-scoped model discovery and optional transport-metadata minimization. See **[中文兼容性与配置说明](FORK_COMPATIBILITY_CN.md)** for migration, validation, limitations and sample `oauth.model-alias.agy` configuration. Based on [adeebahmad01/cliproxy-antigravity](https://github.com/adeebahmad01/cliproxy-antigravity).
+
+
 A CLIProxyAPI dynamic provider that runs Google's **official Antigravity CLI (`agy`)** instead of reusing Antigravity OAuth tokens or calling private Antigravity endpoints.
 
 The plugin presents `agy` as an OpenAI-compatible Chat Completions provider inside CLIProxyAPI:
@@ -125,6 +128,7 @@ plugins:
       limits_tracking: true # track Antigravity usage limits via agy /usage
       limits_refresh_interval: "1m"
       enforce_limits: false # reject requests with 429 when the model's quota group is exhausted
+      strip_client_metadata: false # opt-in: remove protocol/billing header lines from system/developer text
 ```
 
 3. Start CLIProxyAPI and inspect `/v1/models`.
