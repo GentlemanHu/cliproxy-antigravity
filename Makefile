@@ -1,5 +1,5 @@
 BINARY := cliproxy-antigravity
-VERSION ?= 0.3.3
+VERSION ?= 0.3.3-fix
 DIST ?= dist
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
@@ -50,7 +50,7 @@ smoke: build
 
 package:
 	mkdir -p $(DIST)
-	CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -buildmode=c-shared -ldflags="-s -w" -o $(DIST)/$(BINARY).$(EXT) .
+	CGO_ENABLED=1 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -buildmode=c-shared -ldflags="-s -w -X main.pluginVersion=$(VERSION)" -o $(DIST)/$(BINARY).$(EXT) .
 	rm -f $(DIST)/$(BINARY).h
 	go run scripts/package-release.go -library $(DIST)/$(BINARY).$(EXT) -archive $(DIST)/$(BINARY)_$(VERSION)_$(GOOS)_$(GOARCH).zip -checksum $(DIST)/$(BINARY)_$(VERSION)_$(GOOS)_$(GOARCH).zip.sha256
 

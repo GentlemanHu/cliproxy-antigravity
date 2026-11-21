@@ -6,7 +6,7 @@
       "name": "Antigravity CLI Provider — GentlemanHu Fork",
       "description": "OAuth-account-scoped agy provider with fixed CLIProxyAPI model aliases, isolated multi-account model discovery and optional transport-metadata minimization.",
       "author": "GentlemanHu",
-      "version": "0.3.3",
+      "version": "0.3.3-fix",
       "repository": "https://github.com/GentlemanHu/cliproxy-antigravity",
       "homepage": "https://github.com/GentlemanHu/cliproxy-antigravity",
       "license": "MIT",

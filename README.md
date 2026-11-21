@@ -1,6 +1,6 @@
 # CLIProxy Antigravity
 
-> **GentlemanHu fork (v0.3.3):** OAuth-backed `agy` per-account model registration, fixed alias routing, account-scoped model discovery and optional transport-metadata minimization. See **[中文兼容性与配置说明](FORK_COMPATIBILITY_CN.md)** for migration, validation, limitations and sample `oauth.model-alias.agy` configuration. Based on [adeebahmad01/cliproxy-antigravity](https://github.com/adeebahmad01/cliproxy-antigravity).
+> **GentlemanHu fork (v0.3.3-fix):** OAuth-backed `agy` per-account model registration, fixed alias routing, account-scoped model discovery and optional transport-metadata minimization. See **[中文兼容性与配置说明](FORK_COMPATIBILITY_CN.md)** for migration, validation, limitations and sample `oauth.model-alias.agy` configuration. Based on [adeebahmad01/cliproxy-antigravity](https://github.com/adeebahmad01/cliproxy-antigravity).
 
 > **Install through CLIProxyAPI Plugin Store:** See [GitHub Actions Release + custom registry setup (中文)](INSTALL_STORE_CN.md). Use the fork's custom source to install platform builds; no local Go build is necessary.
 

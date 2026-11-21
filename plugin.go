@@ -11,9 +11,11 @@ import (
 const (
 	pluginID      = "cliproxy-antigravity"
 	providerID    = "agy"
-	pluginVersion = "0.3.3"
 	schemaVersion = 6
 )
+
+// Release builds inject the exact version via -X main.pluginVersion.
+var pluginVersion = "0.3.3"
 
 const (
 	methodPluginRegister        = "plugin.register"

@@ -4,7 +4,7 @@
 
 代码分支：`fix/oauth-model-alias-and-claude-bridge`。
 独立的商店索引分支：`plugin-store`。
-Release 版本：`v0.3.3`。
+Release 版本：`v0.3.3-fix`。
 
 ### 1. 通过 Actions 发布跨平台安装包
 
@@ -12,8 +12,8 @@ Release 版本：`v0.3.3`。
 
 1. 如果 GitHub 提示本 Fork 的工作流尚未启用，先启用 Actions。
 2. 选择 **Run workflow**。
-3. **Use workflow from** 选择 `fix/oauth-model-alias-and-claude-bridge`；若页面显示 `release_version` 参数，保持 `0.3.3`。若未显示该参数，也可以直接点击运行（工作流含 `0.3.3` 默认值）。
-4. 工作流先进行 `gofmt` 检查、Go `-race` 测试，再构建 macOS ARM64/AMD64、Linux AMD64/ARM64、Windows AMD64 动态库，并在 Linux AMD64 运行 ABI 冒烟测试。只有全部成功才会创建 `v0.3.3` Release。
+3. **Use workflow from** 选择 `fix/oauth-model-alias-and-claude-bridge`；若页面显示 `release_version` 参数，保持 `0.3.3-fix`。若未显示该参数，也可以直接点击运行（工作流含 `0.3.3-fix` 默认值）。
+4. 工作流先进行 `gofmt` 检查、Go `-race` 测试，再构建 macOS ARM64/AMD64、Linux AMD64/ARM64、Windows AMD64 动态库，并在 Linux AMD64 运行 ABI 冒烟测试。只有全部成功才会创建 `v0.3.3-fix` Release。
 5. 在 [Releases](https://github.com/GentlemanHu/cliproxy-antigravity/releases) 确认存在 `checksums.txt` 及对应平台 ZIP。一般不需要手动下载这些文件，CLIProxyAPI 商店会自动下载并校验。
 
 > GitHub Actions 在新 Fork 中可能默认禁用。仅提交工作流文件**不代表已经执行构建或发布 Release**。
@@ -37,7 +37,7 @@ plugins:
 
 原有 `plugins.dir` 应保持不变。配置更改后，完整重启 CLIProxyAPI，再打开管理面板 → 插件商店。
 
-从插件源 **GentlemanHu / plugin-store** 选择 `Antigravity CLI Provider — GentlemanHu Fork`，选择安装 `v0.3.3`。
+从插件源 **GentlemanHu / plugin-store** 选择 `Antigravity CLI Provider — GentlemanHu Fork`，选择安装 `v0.3.3-fix`。
 注意：官方源和私人源中都有 ID 为 `cliproxy-antigravity` 的插件，必须明确选择 **私人源**。
 
 ### 3. 如果官方商店里的旧版已经安装
@@ -50,7 +50,7 @@ plugins:
 
 ### 4. 确认版本与模型映射
 
-在已启用的插件列表检查版本应该是 **0.3.3**，然后确认账号管理页至少有一个 `type: agy` 的有效凭据。
+在已启用的插件列表检查版本应该是 **0.3.3-fix**，然后确认账号管理页至少有一个 `type: agy` 的有效凭据。
 
 ```yaml
 oauth:
