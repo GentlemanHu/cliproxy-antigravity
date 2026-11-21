@@ -45,7 +45,7 @@ jobs:
           fi
           # Make the binary metadata agree with the release without forcing
           # source edits for every release candidate.
-          grep -Eq '^[[:space:]]*pluginVersion = "0\.3\.3"' plugin.go
+          grep -Eq '^[[:space:]]*var[[:space:]]+pluginVersion[[:space:]]*=[[:space:]]*"0\.3\.3"' plugin.go
           gofmt -w *.go scripts/*.go
           go vet ./...
       - name: Unit tests with race detector
