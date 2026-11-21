@@ -1,5 +1,10 @@
 # CLIProxy Antigravity
 
+> **GentlemanHu fork (v0.3.3-fix):** OAuth-backed `agy` per-account model registration, fixed alias routing, account-scoped model discovery and optional transport-metadata minimization. See **[中文兼容性与配置说明](FORK_COMPATIBILITY_CN.md)** for migration, validation, limitations and sample `oauth.model-alias.agy` configuration. Based on [adeebahmad01/cliproxy-antigravity](https://github.com/adeebahmad01/cliproxy-antigravity).
+
+> **Install through CLIProxyAPI Plugin Store:** See [GitHub Actions Release + custom registry setup (中文)](INSTALL_STORE_CN.md). Use the fork's custom source to install platform builds; no local Go build is necessary.
+
+
 A CLIProxyAPI dynamic provider that runs Google's **official Antigravity CLI (`agy`)** instead of reusing Antigravity OAuth tokens or calling private Antigravity endpoints.
 
 The plugin presents `agy` as an OpenAI-compatible Chat Completions provider inside CLIProxyAPI:
@@ -47,11 +52,11 @@ Google Antigravity
 - Antigravity token usage mapped to OpenAI-compatible usage fields
 - No Antigravity OAuth/token extraction
 - No direct calls to private Antigravity services
-- No fake CLIProxyAPI Antigravity credential: the plugin's `model_router` capability sends its models straight to its own executor, so no auth file is needed
+- OAuth-backed multi-account routing: each `type: agy` credential points to its own CLI HOME and participates in normal credential scheduling, model alias registration, quota and cooldown. No OAuth tokens are copied by the plugin.
 
 The plugin registers under the provider key **`agy`**, and supports requests addressed to `agy/*`, `antigravity/*`, or unprefixed models.
 
-Because `agy` manages its own login, CLIProxyAPI has no auth record to schedule for these models. The plugin therefore routes `agy/*` models, its published unprefixed models, and `antigravity/*` models (only while CLIProxyAPI's built-in Antigravity provider has no credentials) to itself. If you do add an auth record with provider `agy`, routing is left to CLIProxyAPI's normal credential path. Requests can arrive through any CLIProxyAPI entry protocol (`/v1/chat/completions`, `/v1/messages`, `/v1/responses`); the host translates them to Chat Completions for the plugin.
+When at least one enabled `type: agy` credential exists, CLIProxyAPI registers models per credential via `model.for_auth`, applies `oauth.model-alias.agy`, and schedules requests using its normal routing strategy. Without an agy credential, the plugin's direct `model_router` path can still recognize `agy/*` as a fallback, but **OAuth aliases require an agy auth record**. Requests can arrive through any supported CLIProxyAPI entry protocol (`/v1/chat/completions`, `/v1/messages`, `/v1/responses`); the host translates them to Chat Completions for the plugin.
 
 ## Requirements & Platform Support
 
@@ -125,6 +130,7 @@ plugins:
       limits_tracking: true # track Antigravity usage limits via agy /usage
       limits_refresh_interval: "1m"
       enforce_limits: false # reject requests with 429 when the model's quota group is exhausted
+      strip_client_metadata: false # opt-in: remove protocol/billing header lines from system/developer text
 ```
 
 3. Start CLIProxyAPI and inspect `/v1/models`.

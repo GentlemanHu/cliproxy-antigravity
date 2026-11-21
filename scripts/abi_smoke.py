@@ -112,9 +112,13 @@ def main() -> int:
         if rc != 0 or not registration.get("ok"):
             raise RuntimeError(f"registration failed: {registration}")
         result = registration["result"]
-        assert result["capabilities"]["executor_model_scope"] == "static"
+        assert result["capabilities"]["executor_model_scope"] == "oauth"
         fields = {f["Name"]: f for f in result["metadata"]["ConfigFields"]}
-        if fields["reasoning_effort"]["Type"] != "enum" or fields["binary_path"]["Default"] != "agy":
+        if (
+            fields["reasoning_effort"]["Type"] != "enum"
+            or fields["binary_path"]["Default"] != "agy"
+            or fields["strip_client_metadata"]["Default"] is not False
+        ):
             raise RuntimeError(f"unexpected config field metadata: {fields}")
 
         if not result["capabilities"].get("model_router"):
@@ -127,10 +131,28 @@ def main() -> int:
         if "agy/default" not in model_ids or "agy/mock-model-high" not in model_ids:
             raise RuntimeError(f"expected default + discovered model: {model_ids}")
 
-        # agy has no CLIProxyAPI auth record, so its models are routed straight to this executor.
+        # Per-credential registration must publish models under provider agy, so
+        # CLIProxyAPI can apply oauth.model-alias.agy before scheduling a credential.
+        rc, account_models = call("model.for_auth", {
+            "AuthProvider": "agy",
+            "Metadata": {"type": "agy", "home": str(root)},
+        })
+        if rc != 0 or not account_models.get("ok"):
+            raise RuntimeError(f"per-auth discovery failed: {account_models}")
+        account_ids = [m["ID"] for m in account_models["result"]["Models"]]
+        if "gemini-3.8-flash-high" not in account_ids or "agy/mock-model-high" not in account_ids:
+            raise RuntimeError(f"missing per-auth model aliases: {account_ids}")
+
+        # Fallback self-route still works without an OAuth credential; when
+        # the host has an agy credential, the normal scheduler must win.
         rc, route = call("model.route", {"RequestedModel": "agy/mock-model(high)"})
         if rc != 0 or not route["result"]["Handled"] or route["result"]["TargetKind"] != "self":
             raise RuntimeError(f"expected self route for agy model: {route}")
+        rc, route = call("model.route", {
+            "RequestedModel": "agy/mock-model(high)", "AvailableProviders": ["agy"]
+        })
+        if rc != 0 or route["result"]["Handled"]:
+            raise RuntimeError(f"agy OAuth models must defer to host credential scheduling: {route}")
         rc, route = call("model.route", {"RequestedModel": "gpt-5.5"})
         if rc != 0 or route["result"]["Handled"]:
             raise RuntimeError(f"foreign model must not be routed: {route}")

@@ -2,15 +2,28 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - fix/oauth-model-alias-and-claude-bridge
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version without v (e.g. 0.3.3-fix)"
+        required: true
+        type: string
+        default: "0.3.3-fix"
 
 permissions:
   contents: write
 
 env:
   PLUGIN_ID: cliproxy-antigravity
+  # GitHub can render workflow_dispatch controls from the default-branch workflow.
+  # The fallback keeps feature-branch dispatch safe even when that form has no input.
+  RELEASE_VERSION: ${{ inputs.release_version || '0.3.3-fix' }}
+
+concurrency:
+  group: agy-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -22,8 +35,21 @@ jobs:
         with:
           go-version: "1.23.x"
           cache: false
-      - name: Unit tests
-        run: CGO_ENABLED=1 go test -v ./...
+      - name: Validate release version and format
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$ ]]; then
+            echo "::error::Expected X.Y.Z or X.Y.Z-suffix version; got $RELEASE_VERSION"
+            exit 1
+          fi
+          # Make the binary metadata agree with the release without forcing
+          # source edits for every release candidate.
+          grep -Eq '^[[:space:]]*var[[:space:]]+pluginVersion[[:space:]]*=[[:space:]]*"0\.3\.3"' plugin.go
+          gofmt -w *.go scripts/*.go
+          go vet ./...
+      - name: Unit tests with race detector
+        run: CGO_ENABLED=1 go test -race ./...
 
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -72,11 +98,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME:-}" == v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="0.3.2"
-          fi
+          VERSION="$RELEASE_VERSION"
           mkdir -p dist
           LIB_NAME="${PLUGIN_ID}.${{ matrix.ext }}"
           ARCHIVE_NAME="${PLUGIN_ID}_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
@@ -94,9 +116,14 @@ jobs:
 
           CGO_ENABLED=1 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -trimpath -buildmode=c-shared \
-            -ldflags "-s -w" \
+            -ldflags "-s -w -X main.pluginVersion=${VERSION}" \
             -o "dist/${LIB_NAME}" .
           rm -f dist/*.h
+
+          # Validate the native Linux shared library against the CLIProxyAPI ABI.
+          if [ "${{ matrix.goos }}" = "linux" ] && [ "${{ matrix.goarch }}" = "amd64" ]; then
+            python3 scripts/abi_smoke.py "dist/${LIB_NAME}"
+          fi
 
           go run scripts/package-release.go \
             -library "dist/${LIB_NAME}" \
@@ -135,8 +162,15 @@ jobs:
           echo "Generated checksums.txt:"
           cat checksums.txt
           cd ..
-          gh release create "${GITHUB_REF_NAME}" \
+          # Do not replace a published release from an earlier workflow.
+          if gh release view "v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "::error::Release v${RELEASE_VERSION} already exists; bump the version."
+            exit 1
+          fi
+          # Publish only after all tests/builds succeed.
+          gh release create "v${RELEASE_VERSION}" \
             dist/*.zip \
             dist/checksums.txt \
-            --title "${GITHUB_REF_NAME}" \
+            --target "${GITHUB_SHA}" \
+            --title "v${RELEASE_VERSION} (GentlemanHu Fork)" \
             --generate-notes
